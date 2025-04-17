@@ -253,29 +253,62 @@ async fn add_watermark(image_bytes: Bytes, watermark_text: &str) -> Result<Vec<u
         }
     };
 
-    // Set text scale (size)
+    // Calculate font size to be 5% of image height
+    let font_height = (height as f32) * 0.05;
     let scale = Scale {
-        x: (width as f32) / 10.0,
-        y: (height as f32) / 20.0,
+        x: font_height, // We'll use square proportions
+        y: font_height,
     };
 
-    // Draw text at 45-degree angle across the image
-    let text_color = image::Rgba([255, 0, 0, 128]); // Semi-transparent red
+    // Semi-transparent gray for better visibility on various backgrounds
+    let text_color = image::Rgba([128, 128, 128, 90]); // Semi-transparent gray
 
-    // Position text in the center
-    let text_width_approx = (watermark_text.len() as f32 * scale.x) / 4.0;
-    let x = ((width as f32) / 2.0 - text_width_approx) as i32;
-    let y = ((height as f32) / 2.0) as i32;
+    // Calculate the average size of a character in the watermark text
+    let char_width_approx = scale.x * 0.6; // Approximate width of a character
+    let text_width_approx = char_width_approx * watermark_text.len() as f32;
 
-    draw_text_mut(
-        &mut watermarked,
-        text_color,
-        x,
-        y,
-        scale,
-        &font,
-        watermark_text,
-    );
+    // Calculate the spacing between watermarks
+    let spacing_x = text_width_approx * 1.5;
+    let spacing_y = font_height * 2.0;
+
+    // Ensure we cover the entire image
+    let x_repeats = (width as f32 / spacing_x).ceil() as i32 + 1;
+    let y_repeats = (height as f32 / spacing_y).ceil() as i32 + 1;
+
+    // Draw repeated watermarks across the image in a grid pattern
+    for y_idx in -1..y_repeats {
+        for x_idx in -1..x_repeats {
+            // Offset every other row for better coverage
+            let x_offset = if y_idx % 2 == 0 { 0.0 } else { spacing_x / 2.0 };
+
+            let x = (x_idx as f32 * spacing_x + x_offset) as i32;
+            let y = (y_idx as f32 * spacing_y) as i32;
+
+            // Draw the watermark text
+            draw_text_mut(
+                &mut watermarked,
+                text_color,
+                x,
+                y,
+                scale,
+                &font,
+                watermark_text,
+            );
+
+            // Draw diagonal watermark as well (rotated 45 degrees visually)
+            let diagonal_x = x + (spacing_x / 4.0) as i32;
+            let diagonal_y = y + (spacing_y / 4.0) as i32;
+            draw_text_mut(
+                &mut watermarked,
+                text_color,
+                diagonal_x,
+                diagonal_y,
+                scale,
+                &font,
+                watermark_text,
+            );
+        }
+    }
 
     // Convert back to the original format - use a more efficient buffer
     let mut buffer = Vec::with_capacity((width * height * 3) as usize); // Preallocate buffer
