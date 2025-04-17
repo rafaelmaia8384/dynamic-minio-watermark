@@ -2,12 +2,33 @@ use actix_web::{web, App, HttpResponse, HttpServer, Responder};
 use bytes::Bytes;
 use image::{GenericImageView, ImageOutputFormat};
 use imageproc::drawing::draw_text_mut;
+use lazy_static::lazy_static;
 use log::{error, info};
 use reqwest::Client;
 use rusttype::{Font, Scale};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::io::Cursor;
+use std::sync::Arc;
+use std::sync::RwLock;
+
+lazy_static! {
+    static ref WATERMARK_FONT: Arc<RwLock<Option<Font<'static>>>> = {
+        let font_result = load_font();
+        match font_result {
+            Ok(font) => Arc::new(RwLock::new(Some(font))),
+            Err(e) => {
+                error!("Failed to load font at startup: {}", e);
+                Arc::new(RwLock::new(None))
+            }
+        }
+    };
+}
+
+// Estrutura compartilhada em toda aplicação
+struct AppState {
+    client: Client,
+}
 
 #[derive(Debug, Deserialize)]
 struct ObjectContext {
@@ -67,13 +88,65 @@ struct GenerateResponse {
     message: String,
 }
 
-async fn generate(payload: web::Json<GenerateRequest>) -> impl Responder {
+// Load font from file or embedded resource
+fn load_font() -> Result<Font<'static>, String> {
+    // Try to get font path from environment variable
+    let font_path =
+        std::env::var("FONT_PATH").unwrap_or_else(|_| "assets/DejaVuSans.ttf".to_string());
+
+    info!("Loading font from: {}", font_path);
+
+    // Prepare font for watermark - try to load from specified or default location
+    let font_data = match std::fs::read(&font_path) {
+        Ok(data) => data,
+        Err(e1) => {
+            // If that fails, try the relative path from a different location
+            let alt_path = format!("./{}", font_path);
+            info!("Trying alternative font path: {}", alt_path);
+            match std::fs::read(&alt_path) {
+                Ok(data) => data,
+                Err(e2) => {
+                    // If that also fails, try embedded font as last resort
+                    error!(
+                        "Failed to load font from path: {}, error: {}",
+                        font_path, e1
+                    );
+                    error!(
+                        "Failed to load font from alternative path: {}, error: {}",
+                        alt_path, e2
+                    );
+
+                    // Try to use the embedded font
+                    #[cfg(feature = "embedded_font")]
+                    {
+                        info!("Using embedded font as fallback");
+                        include_bytes!("../assets/DejaVuSans.ttf").to_vec()
+                    }
+
+                    #[cfg(not(feature = "embedded_font"))]
+                    return Err(format!(
+                        "Failed to load font file: {} (also tried {})",
+                        e1, e2
+                    ));
+                }
+            }
+        }
+    };
+
+    // Convert the loaded font data to a static lifetime
+    let static_font_data: &'static [u8] = Box::leak(font_data.into_boxed_slice());
+
+    Font::try_from_bytes(static_font_data).ok_or_else(|| "Failed to parse font data".to_string())
+}
+
+async fn generate(
+    payload: web::Json<GenerateRequest>,
+    app_state: web::Data<AppState>,
+) -> impl Responder {
     info!(
         "Received watermarking request: {:?}",
         payload.get_object_context.input_s3_url
     );
-
-    let client = Client::new();
 
     // Extract watermark parameter from URL if present
     let url_params = extract_url_params(&payload.user_request.url);
@@ -83,7 +156,7 @@ async fn generate(payload: web::Json<GenerateRequest>) -> impl Responder {
         .unwrap_or_else(|| "WATERMARK".to_string());
 
     // Step 1: Download the image from input_s3_url
-    match download_image(&client, &payload.get_object_context.input_s3_url).await {
+    match download_image(&app_state.client, &payload.get_object_context.input_s3_url).await {
         Ok(image_bytes) => {
             // Step 2: Add watermark to the image
             match add_watermark(image_bytes, &watermark_text).await {
@@ -158,52 +231,27 @@ async fn add_watermark(image_bytes: Bytes, watermark_text: &str) -> Result<Vec<u
     // Create a mutable copy of the image
     let mut watermarked = img.to_rgba8();
 
-    // Try to get font path from environment variable
-    let font_path =
-        std::env::var("FONT_PATH").unwrap_or_else(|_| "assets/DejaVuSans.ttf".to_string());
-
-    // Log the font path we're trying to use
-    info!("Attempting to load font from: {}", font_path);
-
-    // Prepare font for watermark - try to load from specified or default location
-    let font_data = match std::fs::read(&font_path) {
-        Ok(data) => data,
-        Err(e1) => {
-            // If that fails, try the relative path from a different location
-            let alt_path = format!("./{}", font_path);
-            info!("Trying alternative font path: {}", alt_path);
-            match std::fs::read(&alt_path) {
-                Ok(data) => data,
-                Err(e2) => {
-                    // If that also fails, try embedded font as last resort
-                    error!(
-                        "Failed to load font from path: {}, error: {}",
-                        font_path, e1
-                    );
-                    error!(
-                        "Failed to load font from alternative path: {}, error: {}",
-                        alt_path, e2
-                    );
-
-                    // Try to use the embedded font
-                    #[cfg(feature = "embedded_font")]
-                    {
-                        info!("Using embedded font as fallback");
-                        include_bytes!("../assets/DejaVuSans.ttf").to_vec()
-                    }
-
-                    #[cfg(not(feature = "embedded_font"))]
-                    return Err(format!(
-                        "Failed to load font file: {} (also tried {})",
-                        e1, e2
-                    ));
+    // Get the font from the lazy static
+    let font = {
+        let font_lock = WATERMARK_FONT
+            .read()
+            .map_err(|_| "Failed to acquire read lock on font".to_string())?;
+        match &*font_lock {
+            Some(font) => font.clone(),
+            None => {
+                // If font failed to load at startup, try to load it again
+                drop(font_lock); // Release the read lock before acquiring write lock
+                let mut font_lock = WATERMARK_FONT
+                    .write()
+                    .map_err(|_| "Failed to acquire write lock on font".to_string())?;
+                if let None = *font_lock {
+                    // Try to load again
+                    *font_lock = Some(load_font()?);
                 }
+                font_lock.as_ref().unwrap().clone()
             }
         }
     };
-
-    let font =
-        Font::try_from_bytes(&font_data).ok_or_else(|| "Failed to parse font data".to_string())?;
 
     // Set text scale (size)
     let scale = Scale {
@@ -229,8 +277,8 @@ async fn add_watermark(image_bytes: Bytes, watermark_text: &str) -> Result<Vec<u
         watermark_text,
     );
 
-    // Convert back to the original format
-    let mut buffer = Vec::new();
+    // Convert back to the original format - use a more efficient buffer
+    let mut buffer = Vec::with_capacity((width * height * 3) as usize); // Preallocate buffer
     let mut cursor = Cursor::new(&mut buffer);
     watermarked
         .write_to(&mut cursor, ImageOutputFormat::Jpeg(90))
@@ -256,10 +304,31 @@ async fn main() -> std::io::Result<()> {
         .and_then(|p| p.parse::<u16>().ok())
         .unwrap_or(3333);
 
+    // Initialize shared HTTP client
+    let client = Client::builder()
+        .pool_max_idle_per_host(10) // Reuse connections
+        .build()
+        .expect("Failed to create HTTP client");
+
+    // Preload font at startup
+    info!("Preloading font...");
+    match &*WATERMARK_FONT.read().unwrap() {
+        Some(_) => info!("Font loaded successfully at startup"),
+        None => error!("Failed to load font at startup, will try again on first request"),
+    }
+
     info!("Starting server on {}:{}...", host, port);
 
-    HttpServer::new(|| App::new().route("/generate/", web::post().to(generate)))
-        .bind(format!("{}:{}", host, port))?
-        .run()
-        .await
+    // Create app state with shared HTTP client
+    let app_state = web::Data::new(AppState { client });
+
+    HttpServer::new(move || {
+        App::new()
+            .app_data(app_state.clone())
+            .route("/generate/", web::post().to(generate))
+    })
+    .workers(num_cpus::get()) // Use optimal number of workers based on CPU cores
+    .bind(format!("{}:{}", host, port))?
+    .run()
+    .await
 }
