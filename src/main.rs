@@ -196,101 +196,78 @@ async fn add_watermark(image_bytes: Bytes, watermark_text: &str) -> Result<Vec<u
     let img = image::load_from_memory(&image_bytes)
         .map_err(|e| format!("Failed to load image: {}", e))?;
 
-    // Get image dimensions
-    let (width, height) = img.dimensions();
-
-    // Create a mutable copy of the image
+    // Convert to RGBA8 if not already
     let mut watermarked = img.to_rgba8();
 
-    // Get the font from the lazy static
+    // Get the font
     let font = {
         let font_lock = WATERMARK_FONT
             .read()
             .map_err(|_| "Failed to acquire read lock on font".to_string())?;
-        match &*font_lock {
-            Some(font) => font.clone(),
-            None => {
-                // If font failed to load at startup, try to load it again
-                drop(font_lock); // Release the read lock before acquiring write lock
-                let mut font_lock = WATERMARK_FONT
-                    .write()
-                    .map_err(|_| "Failed to acquire write lock on font".to_string())?;
-                if let None = *font_lock {
-                    // Try to load again
-                    *font_lock = Some(load_font()?);
-                }
-                font_lock.as_ref().unwrap().clone()
-            }
-        }
+        font_lock.as_ref().ok_or("Font not loaded")?.clone()
     };
 
-    // Calculate font size to be 10% of image height (increased from 5%)
-    let font_height = (height as f32) * 0.10;
+    // Calculate font size (10% of image height)
+    let font_height = (watermarked.height() as f32) * 0.10;
     let scale = Scale {
-        x: font_height * 0.6, // Make width slightly smaller for a denser pattern
+        x: font_height * 0.6,
         y: font_height,
     };
 
-    // Semi-transparent gray for better visibility on various backgrounds
-    let text_color = image::Rgba([50, 100, 255, 50]);
+    // Light blue color with 30% opacity (70% transparent)
+    let text_color = image::Rgba([100, 150, 255, 76]); // R, G, B, Alpha (76 = ~30% opacity)
 
-    // Create a continuous pattern across the entire image
-
-    // First, convert the watermark text to a repeating character array
+    // Prepare watermark pattern
     let chars: Vec<char> = watermark_text.chars().collect();
     if chars.is_empty() {
         return Err("Watermark text cannot be empty".to_string());
     }
 
-    // Calculate the horizontal and vertical spacing between characters
-    let char_spacing_x = scale.x * 0.9; // Slight overlap between characters (adjusted for larger font)
-    let char_spacing_y = scale.y * 0.5; // Slight spacing between rows (reduced for larger font)
+    // Calculate spacing
+    let char_spacing_x = scale.x * 0.9;
+    let char_spacing_y = scale.y * 0.5;
+    let chars_per_row = (watermarked.width() as f32 / char_spacing_x).ceil() as usize;
+    let rows = (watermarked.height() as f32 / char_spacing_y).ceil() as usize;
 
-    // Calculate how many characters we can fit horizontally and vertically
-    let chars_per_row = (width as f32 / char_spacing_x).ceil() as usize;
-    let rows = (height as f32 / char_spacing_y).ceil() as usize;
+    // Apply global offset
+    let global_offset_x = -char_spacing_x * 0.5;
+    let global_offset_y = -char_spacing_y;
 
-    // Configuração do offset global (negativo)
-    let global_offset_x = -char_spacing_x * 0.5; // Offset negativo de 50% do espaçamento horizontal
-    let global_offset_y = -char_spacing_y * 0.5; // Offset negativo de 50% do espaçamento vertical
-
+    // Draw watermark
     for row in 0..rows {
-        // Even rows (0, 2, 4...) get no offset, odd rows (1, 3, 5...) get half spacing offset
         let x_offset = if row % 2 == 0 {
             0.0
         } else {
             char_spacing_x / 2.0
         };
-
         let y_pos = row as f32 * char_spacing_y + global_offset_y;
 
         for col in 0..chars_per_row {
             let x_pos = col as f32 * char_spacing_x + x_offset + global_offset_x;
-
-            // Get character (cycling through the watermark text)
             let char_idx = (row + col) % chars.len();
-            let c = chars[char_idx];
 
-            // Draw this character if within bounds
-            if x_pos < width as f32 && y_pos < height as f32 {
-                draw_character_mut(
+            if x_pos >= 0.0
+                && y_pos >= 0.0
+                && x_pos < watermarked.width() as f32
+                && y_pos < watermarked.height() as f32
+            {
+                draw_text_mut(
                     &mut watermarked,
                     text_color,
                     x_pos as i32,
                     y_pos as i32,
                     scale,
                     &font,
-                    c,
+                    &chars[char_idx].to_string(),
                 );
             }
         }
     }
 
-    // Convert back to the original format - use a more efficient buffer
-    let mut buffer = Vec::with_capacity((width * height * 3) as usize); // Preallocate buffer
-    let mut cursor = Cursor::new(&mut buffer);
+    // Save as JPEG with quality 90
+    let mut buffer = Vec::new();
     watermarked
-        .write_to(&mut cursor, ImageOutputFormat::Jpeg(90))
+        .write_to(&mut Cursor::new(&mut buffer), ImageOutputFormat::Jpeg(90))
         .map_err(|e| format!("Failed to encode image: {}", e))?;
 
     Ok(buffer)
