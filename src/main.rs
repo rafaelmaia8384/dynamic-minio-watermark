@@ -253,8 +253,8 @@ async fn add_watermark(image_bytes: Bytes, watermark_text: &str) -> Result<Vec<u
         }
     };
 
-    // Calculate font size to be 5% of image height
-    let font_height = (height as f32) * 0.05;
+    // Calculate font size to be 10% of image height (increased from 5%)
+    let font_height = (height as f32) * 0.10;
     let scale = Scale {
         x: font_height * 0.6, // Make width slightly smaller for a denser pattern
         y: font_height,
@@ -272,8 +272,8 @@ async fn add_watermark(image_bytes: Bytes, watermark_text: &str) -> Result<Vec<u
     }
 
     // Calculate the horizontal and vertical spacing between characters
-    let char_spacing_x = scale.x * 0.85; // Slight overlap between characters
-    let char_spacing_y = scale.y * 1.2; // Slight spacing between rows
+    let char_spacing_x = scale.x * 0.9; // Slight overlap between characters (adjusted for larger font)
+    let char_spacing_y = scale.y * 1.1; // Slight spacing between rows (reduced for larger font)
 
     // Calculate how many characters we can fit horizontally and vertically
     let chars_per_row = (width as f32 / char_spacing_x).ceil() as usize;
