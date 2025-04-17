@@ -1,6 +1,6 @@
 use actix_web::{web, App, HttpResponse, HttpServer, Responder};
 use bytes::Bytes;
-use image::{GenericImageView, ImageOutputFormat};
+use image::ImageOutputFormat;
 use imageproc::drawing::draw_text_mut;
 use lazy_static::lazy_static;
 use log::{error, info};
@@ -214,8 +214,9 @@ async fn add_watermark(image_bytes: Bytes, watermark_text: &str) -> Result<Vec<u
         y: font_height,
     };
 
-    // Light blue color with 30% opacity (70% transparent)
-    let text_color = image::Rgba([100, 150, 255, 76]); // R, G, B, Alpha (76 = ~30% opacity)
+    // Watermark color and opacity
+    let watermark_color = [100, 150, 255]; // Light blue
+    let opacity = 0.3; // 30% opacity
 
     // Prepare watermark pattern
     let chars: Vec<char> = watermark_text.chars().collect();
@@ -232,6 +233,12 @@ async fn add_watermark(image_bytes: Bytes, watermark_text: &str) -> Result<Vec<u
     // Apply global offset
     let global_offset_x = -char_spacing_x * 0.5;
     let global_offset_y = -char_spacing_y;
+
+    // Create a temporary image for character drawing
+    let mut char_buffer = image::RgbaImage::new(
+        (scale.x * 1.5) as u32, // Slightly larger than character size
+        (scale.y * 1.5) as u32,
+    );
 
     // Draw watermark
     for row in 0..rows {
@@ -251,15 +258,44 @@ async fn add_watermark(image_bytes: Bytes, watermark_text: &str) -> Result<Vec<u
                 && x_pos < watermarked.width() as f32
                 && y_pos < watermarked.height() as f32
             {
+                // Clear the character buffer
+                for pixel in char_buffer.pixels_mut() {
+                    *pixel = image::Rgba([0, 0, 0, 0]);
+                }
+
+                // Draw the character in our buffer
                 draw_text_mut(
-                    &mut watermarked,
-                    text_color,
-                    x_pos as i32,
-                    y_pos as i32,
+                    &mut char_buffer,
+                    image::Rgba([255, 255, 255, 255]), // White with full opacity
+                    0,
+                    0, // Draw at 0,0 in our buffer
                     scale,
                     &font,
                     &chars[char_idx].to_string(),
                 );
+
+                // Blend the character onto the main image
+                for (bx, by, pixel) in char_buffer.enumerate_pixels() {
+                    let wx = x_pos as u32 + bx;
+                    let wy = y_pos as u32 + by;
+
+                    if wx < watermarked.width() && wy < watermarked.height() && pixel[3] > 0 {
+                        let bg_pixel = watermarked.get_pixel(wx, wy);
+
+                        // Blend colors with specified opacity
+                        let r = (bg_pixel[0] as f32 * (1.0 - opacity)
+                            + watermark_color[0] as f32 * opacity)
+                            as u8;
+                        let g = (bg_pixel[1] as f32 * (1.0 - opacity)
+                            + watermark_color[1] as f32 * opacity)
+                            as u8;
+                        let b = (bg_pixel[2] as f32 * (1.0 - opacity)
+                            + watermark_color[2] as f32 * opacity)
+                            as u8;
+
+                        watermarked.put_pixel(wx, wy, image::Rgba([r, g, b, 255]));
+                    }
+                }
             }
         }
     }
@@ -271,21 +307,6 @@ async fn add_watermark(image_bytes: Bytes, watermark_text: &str) -> Result<Vec<u
         .map_err(|e| format!("Failed to encode image: {}", e))?;
 
     Ok(buffer)
-}
-
-// Helper function to draw a single character
-fn draw_character_mut(
-    image: &mut image::RgbaImage,
-    color: image::Rgba<u8>,
-    x: i32,
-    y: i32,
-    scale: Scale,
-    font: &Font,
-    character: char,
-) {
-    // We'll use the built-in draw_text_mut function but with only one character
-    let char_str = character.to_string();
-    draw_text_mut(image, color, x, y, scale, font, &char_str);
 }
 
 #[actix_web::main]
