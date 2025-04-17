@@ -41,32 +41,7 @@ struct ObjectContext {
 }
 
 #[derive(Debug, Deserialize)]
-struct UserIdentity {
-    #[serde(rename = "accessKeyId")]
-    access_key_id: String,
-    #[serde(rename = "principalId")]
-    principal_id: String,
-    #[serde(rename = "type")]
-    identity_type: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct UserRequestHeaders {
-    #[serde(default, rename = "Accept")]
-    accept: Vec<String>,
-    #[serde(default, rename = "Accept-Encoding")]
-    accept_encoding: Vec<String>,
-    #[serde(default, rename = "Connection")]
-    connection: Vec<String>,
-    #[serde(default, rename = "User-Agent")]
-    user_agent: Vec<String>,
-    #[serde(default, rename = "X-Amz-Signature-Age")]
-    x_amz_signature_age: Vec<String>,
-}
-
-#[derive(Debug, Deserialize)]
 struct UserRequest {
-    headers: UserRequestHeaders,
     url: String,
 }
 
@@ -74,10 +49,6 @@ struct UserRequest {
 struct GenerateRequest {
     #[serde(rename = "getObjectContext")]
     get_object_context: ObjectContext,
-    #[serde(rename = "protocolVersion")]
-    protocol_version: String,
-    #[serde(rename = "userIdentity")]
-    user_identity: UserIdentity,
     #[serde(rename = "userRequest")]
     user_request: UserRequest,
 }
@@ -371,17 +342,9 @@ async fn main() -> std::io::Result<()> {
     // Initialize logger
     env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
 
-    // Load environment variables (optional)
-    if let Err(e) = dotenv::dotenv() {
-        println!("Warning: Error loading .env file: {}", e);
-    }
-
     // Get host and port from environment variables or use defaults
-    let host = std::env::var("HOST").unwrap_or_else(|_| "0.0.0.0".to_string());
-    let port = std::env::var("PORT")
-        .ok()
-        .and_then(|p| p.parse::<u16>().ok())
-        .unwrap_or(3333);
+    let host = "0.0.0.0".to_string();
+    let port = 3333;
 
     // Initialize shared HTTP client
     let client = Client::builder()
