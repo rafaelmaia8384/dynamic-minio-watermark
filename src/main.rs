@@ -215,11 +215,11 @@ async fn add_watermark(image_bytes: Bytes, watermark_text: &str) -> Result<Vec<u
     };
 
     // Watermark and shadow settings
-    let watermark_color = [100, 150, 255]; // Light blue
-    let shadow_color = [255, 255, 100]; // Yellow
-    let watermark_opacity = 0.2; // 30% opacity
-    let shadow_opacity = 0.2; // 40% opacity for shadow
-    let shadow_offset_ratio = 0.05; // 5% of character size
+    let watermark_color = [255, 255, 255];
+    let shadow_color = [0, 0, 0];
+    let watermark_opacity = 0.18;
+    let shadow_opacity = 0.18;
+    let shadow_offset_ratio = 0.065;
 
     // Calculate shadow offset (5% of character size)
     let shadow_offset_x = (scale.x * shadow_offset_ratio) as i32;
@@ -232,8 +232,8 @@ async fn add_watermark(image_bytes: Bytes, watermark_text: &str) -> Result<Vec<u
     }
 
     // Calculate spacing
-    let char_spacing_x = scale.x * 0.9;
-    let char_spacing_y = scale.y * 0.5;
+    let char_spacing_x = scale.x * 1.1;
+    let char_spacing_y = scale.y * 0.4;
     let chars_per_row = (watermarked.width() as f32 / char_spacing_x).ceil() as usize;
     let rows = (watermarked.height() as f32 / char_spacing_y).ceil() as usize;
 
