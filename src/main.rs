@@ -232,7 +232,7 @@ async fn add_watermark(image_bytes: Bytes, watermark_text: &str) -> Result<Vec<u
     };
 
     // Semi-transparent gray for better visibility on various backgrounds
-    let text_color = image::Rgba([128, 128, 128, 80]); // Semi-transparent gray
+    let text_color = image::Rgba([50, 100, 255, 50]);
 
     // Create a continuous pattern across the entire image
 
@@ -244,70 +244,44 @@ async fn add_watermark(image_bytes: Bytes, watermark_text: &str) -> Result<Vec<u
 
     // Calculate the horizontal and vertical spacing between characters
     let char_spacing_x = scale.x * 0.9; // Slight overlap between characters (adjusted for larger font)
-    let char_spacing_y = scale.y * 1.1; // Slight spacing between rows (reduced for larger font)
+    let char_spacing_y = scale.y * 0.5; // Slight spacing between rows (reduced for larger font)
 
     // Calculate how many characters we can fit horizontally and vertically
     let chars_per_row = (width as f32 / char_spacing_x).ceil() as usize;
     let rows = (height as f32 / char_spacing_y).ceil() as usize;
 
-    // Create a pattern with 4 different offsets that repeat: rows 0, 4, 8... have offset A;
-    // rows 1, 5, 9... have offset B; rows 2, 6, 10... have offset C; rows 3, 7, 11... have offset D
+    // Configuração do offset global (negativo)
+    let global_offset_x = -char_spacing_x * 0.5; // Offset negativo de 50% do espaçamento horizontal
+    let global_offset_y = -char_spacing_y * 0.5; // Offset negativo de 50% do espaçamento vertical
+
     for row in 0..rows {
-        // Use modulo 4 to create a cycle of 4 different offsets
-        let x_offset = match row % 4 {
-            0 => 0.0,                        // Offset A - zero offset
-            1 => char_spacing_x / 2.0,       // Offset B - half-character offset
-            2 => char_spacing_x / 4.0,       // Offset C - quarter-character offset
-            3 => char_spacing_x * 3.0 / 4.0, // Offset D - three-quarter-character offset
-            _ => unreachable!(),
+        // Even rows (0, 2, 4...) get no offset, odd rows (1, 3, 5...) get half spacing offset
+        let x_offset = if row % 2 == 0 {
+            0.0
+        } else {
+            char_spacing_x / 2.0
         };
 
-        let y_pos = row as f32 * char_spacing_y;
+        let y_pos = row as f32 * char_spacing_y + global_offset_y;
 
-        for col in 0..chars_per_row + 1 {
-            let x_pos = col as f32 * char_spacing_x + x_offset;
+        for col in 0..chars_per_row {
+            let x_pos = col as f32 * char_spacing_x + x_offset + global_offset_x;
 
             // Get character (cycling through the watermark text)
             let char_idx = (row + col) % chars.len();
             let c = chars[char_idx];
 
             // Draw this character if within bounds
-            if x_pos >= 0.0 && x_pos < width as f32 && y_pos >= 0.0 && y_pos < height as f32 {
-                let x = x_pos as i32;
-                let y = y_pos as i32;
-
-                draw_character_mut(&mut watermarked, text_color, x, y, scale, &font, c);
-            }
-        }
-    }
-
-    // Add a second layer at intermediate vertical positions with complementary offsets
-    for row in 0..rows {
-        // For the second layer, use a different pattern of 4 offsets
-        let x_offset = match row % 4 {
-            0 => char_spacing_x * 3.0 / 8.0, // Complementary to A and C
-            1 => char_spacing_x * 7.0 / 8.0, // Complementary to B and D
-            2 => char_spacing_x * 5.0 / 8.0, // Complementary to C and A
-            3 => char_spacing_x * 1.0 / 8.0, // Complementary to D and B
-            _ => unreachable!(),
-        };
-
-        // Position second layer's rows between first layer's rows
-        let y_pos = row as f32 * char_spacing_y + char_spacing_y / 2.0;
-
-        for col in 0..chars_per_row + 1 {
-            let x_pos = col as f32 * char_spacing_x + x_offset;
-
-            // Get character (using a different cycling pattern)
-            let char_idx = (row + col + chars.len() / 2) % chars.len();
-            let c = chars[char_idx];
-
-            // Draw this character if within bounds
-            if x_pos >= 0.0 && x_pos < width as f32 && y_pos >= 0.0 && y_pos < height as f32 {
-                let x = x_pos as i32;
-                let y = y_pos as i32;
-
-                draw_character_mut(&mut watermarked, text_color, x, y, scale, &font, c);
+            if x_pos < width as f32 && y_pos < height as f32 {
+                draw_character_mut(
+                    &mut watermarked,
+                    text_color,
+                    x_pos as i32,
+                    y_pos as i32,
+                    scale,
+                    &font,
+                    c,
+                );
             }
         }
     }
