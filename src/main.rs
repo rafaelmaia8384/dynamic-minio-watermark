@@ -1,4 +1,4 @@
-use actix_web::{http::header, web, App, HttpResponse, HttpServer, Responder};
+use actix_web::{web, App, HttpResponse, HttpServer, Responder};
 use bytes::Bytes;
 use image::{GenericImageView, ImageOutputFormat};
 use imageproc::drawing::draw_text_mut;
@@ -11,31 +11,36 @@ use std::io::Cursor;
 
 #[derive(Debug, Deserialize)]
 struct ObjectContext {
-    inputS3Url: String,
-    outputRoute: String,
-    outputToken: String,
+    #[serde(rename = "inputS3Url")]
+    input_s3_url: String,
+    #[serde(rename = "outputRoute")]
+    output_route: String,
+    #[serde(rename = "outputToken")]
+    output_token: String,
 }
 
 #[derive(Debug, Deserialize)]
 struct UserIdentity {
-    accessKeyId: String,
-    principalId: String,
+    #[serde(rename = "accessKeyId")]
+    access_key_id: String,
+    #[serde(rename = "principalId")]
+    principal_id: String,
     #[serde(rename = "type")]
     identity_type: String,
 }
 
 #[derive(Debug, Deserialize)]
 struct UserRequestHeaders {
-    #[serde(default)]
-    Accept: Vec<String>,
+    #[serde(default, rename = "Accept")]
+    accept: Vec<String>,
     #[serde(default, rename = "Accept-Encoding")]
-    Accept_Encoding: Vec<String>,
-    #[serde(default)]
-    Connection: Vec<String>,
+    accept_encoding: Vec<String>,
+    #[serde(default, rename = "Connection")]
+    connection: Vec<String>,
     #[serde(default, rename = "User-Agent")]
-    User_Agent: Vec<String>,
+    user_agent: Vec<String>,
     #[serde(default, rename = "X-Amz-Signature-Age")]
-    X_Amz_Signature_Age: Vec<String>,
+    x_amz_signature_age: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -46,10 +51,14 @@ struct UserRequest {
 
 #[derive(Debug, Deserialize)]
 struct GenerateRequest {
-    getObjectContext: ObjectContext,
-    protocolVersion: String,
-    userIdentity: UserIdentity,
-    userRequest: UserRequest,
+    #[serde(rename = "getObjectContext")]
+    get_object_context: ObjectContext,
+    #[serde(rename = "protocolVersion")]
+    protocol_version: String,
+    #[serde(rename = "userIdentity")]
+    user_identity: UserIdentity,
+    #[serde(rename = "userRequest")]
+    user_request: UserRequest,
 }
 
 #[derive(Debug, Serialize)]
@@ -61,48 +70,38 @@ struct GenerateResponse {
 async fn generate(payload: web::Json<GenerateRequest>) -> impl Responder {
     info!(
         "Received watermarking request: {:?}",
-        payload.getObjectContext.inputS3Url
+        payload.get_object_context.input_s3_url
     );
 
     let client = Client::new();
 
     // Extract watermark parameter from URL if present
-    let url_params = extract_url_params(&payload.userRequest.url);
+    let url_params = extract_url_params(&payload.user_request.url);
     let watermark_text = url_params
         .get("usercode")
         .cloned()
         .unwrap_or_else(|| "WATERMARK".to_string());
 
-    // Step 1: Download the image from inputS3Url
-    match download_image(&client, &payload.getObjectContext.inputS3Url).await {
+    // Step 1: Download the image from input_s3_url
+    match download_image(&client, &payload.get_object_context.input_s3_url).await {
         Ok(image_bytes) => {
             // Step 2: Add watermark to the image
             match add_watermark(image_bytes, &watermark_text).await {
                 Ok(watermarked_image) => {
-                    // Step 3: Send the watermarked image back to the output URL
-                    match send_processed_image(
-                        &client,
-                        &payload.getObjectContext.outputRoute,
-                        &payload.getObjectContext.outputToken,
-                        watermarked_image,
-                    )
-                    .await
-                    {
-                        Ok(_) => {
-                            info!("Successfully processed and returned watermarked image");
-                            HttpResponse::Ok().json(GenerateResponse {
-                                status: "success".to_string(),
-                                message: "Image successfully watermarked".to_string(),
-                            })
-                        }
-                        Err(e) => {
-                            error!("Failed to send processed image: {}", e);
-                            HttpResponse::InternalServerError().json(GenerateResponse {
-                                status: "error".to_string(),
-                                message: format!("Failed to send processed image: {}", e),
-                            })
-                        }
-                    }
+                    info!("Successfully processed image with watermark");
+
+                    // Return the watermarked image directly in the response with the required headers
+                    HttpResponse::Ok()
+                        .content_type("image/jpeg")
+                        .append_header((
+                            "x-amz-request-route",
+                            payload.get_object_context.output_route.clone(),
+                        ))
+                        .append_header((
+                            "x-amz-request-token",
+                            payload.get_object_context.output_token.clone(),
+                        ))
+                        .body(watermarked_image)
                 }
                 Err(e) => {
                     error!("Failed to add watermark: {}", e);
@@ -159,10 +158,52 @@ async fn add_watermark(image_bytes: Bytes, watermark_text: &str) -> Result<Vec<u
     // Create a mutable copy of the image
     let mut watermarked = img.to_rgba8();
 
-    // Prepare font for watermark
-    let font_data = include_bytes!("../assets/DejaVuSans.ttf");
-    let font = Font::try_from_bytes(font_data as &[u8])
-        .ok_or_else(|| "Failed to load font".to_string())?;
+    // Try to get font path from environment variable
+    let font_path =
+        std::env::var("FONT_PATH").unwrap_or_else(|_| "assets/DejaVuSans.ttf".to_string());
+
+    // Log the font path we're trying to use
+    info!("Attempting to load font from: {}", font_path);
+
+    // Prepare font for watermark - try to load from specified or default location
+    let font_data = match std::fs::read(&font_path) {
+        Ok(data) => data,
+        Err(e1) => {
+            // If that fails, try the relative path from a different location
+            let alt_path = format!("./{}", font_path);
+            info!("Trying alternative font path: {}", alt_path);
+            match std::fs::read(&alt_path) {
+                Ok(data) => data,
+                Err(e2) => {
+                    // If that also fails, try embedded font as last resort
+                    error!(
+                        "Failed to load font from path: {}, error: {}",
+                        font_path, e1
+                    );
+                    error!(
+                        "Failed to load font from alternative path: {}, error: {}",
+                        alt_path, e2
+                    );
+
+                    // Try to use the embedded font
+                    #[cfg(feature = "embedded_font")]
+                    {
+                        info!("Using embedded font as fallback");
+                        include_bytes!("../assets/DejaVuSans.ttf").to_vec()
+                    }
+
+                    #[cfg(not(feature = "embedded_font"))]
+                    return Err(format!(
+                        "Failed to load font file: {} (also tried {})",
+                        e1, e2
+                    ));
+                }
+            }
+        }
+    };
+
+    let font =
+        Font::try_from_bytes(&font_data).ok_or_else(|| "Failed to parse font data".to_string())?;
 
     // Set text scale (size)
     let scale = Scale {
@@ -198,30 +239,6 @@ async fn add_watermark(image_bytes: Bytes, watermark_text: &str) -> Result<Vec<u
     Ok(buffer)
 }
 
-async fn send_processed_image(
-    client: &Client,
-    output_route: &str,
-    output_token: &str,
-    image_data: Vec<u8>,
-) -> Result<(), String> {
-    // Create the WriteGetObjectResponse request
-    let response = client
-        .post(format!("http://localhost:9000/{}", output_route))
-        .header(header::CONTENT_TYPE, "image/jpeg")
-        .header("x-amz-request-route", output_route)
-        .header("x-amz-request-token", output_token)
-        .body(image_data)
-        .send()
-        .await
-        .map_err(|e| format!("Failed to send response: {}", e))?;
-
-    if !response.status().is_success() {
-        return Err(format!("Error response from server: {}", response.status()));
-    }
-
-    Ok(())
-}
-
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     // Initialize logger
@@ -232,10 +249,14 @@ async fn main() -> std::io::Result<()> {
         println!("Warning: Error loading .env file: {}", e);
     }
 
-    let host = "127.0.0.1";
-    let port = 8080;
+    // Get host and port from environment variables or use defaults
+    let host = std::env::var("HOST").unwrap_or_else(|_| "0.0.0.0".to_string());
+    let port = std::env::var("PORT")
+        .ok()
+        .and_then(|p| p.parse::<u16>().ok())
+        .unwrap_or(3333);
 
-    info!("Starting server on port {}...", port);
+    info!("Starting server on {}:{}...", host, port);
 
     HttpServer::new(|| App::new().route("/generate/", web::post().to(generate)))
         .bind(format!("{}:{}", host, port))?
