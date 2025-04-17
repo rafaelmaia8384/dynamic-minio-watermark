@@ -1,0 +1,44 @@
+services:
+  watermarker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: minio-watermarker:latest
+    container_name: minio-watermarker
+    restart: unless-stopped
+    ports:
+      - "${PORT:-3333}:${PORT:-3333}"
+    environment:
+      - HOST=0.0.0.0
+      - PORT=${PORT:-3333}
+      - WORKERS=${WORKERS:-0}
+      - FONT_PATH=${FONT_PATH:-assets/DejaVuSans.ttf}
+      - FONT_HEIGHT_RATIO=${FONT_HEIGHT_RATIO:-0.10}
+      - FONT_HEIGHT_MIN=${FONT_HEIGHT_MIN:-10.0}
+      - FONT_WIDTH_RATIO=${FONT_WIDTH_RATIO:-0.6}
+      - WATERMARK_COLOR_R=${WATERMARK_COLOR_R:-255}
+      - WATERMARK_COLOR_G=${WATERMARK_COLOR_G:-255}
+      - WATERMARK_COLOR_B=${WATERMARK_COLOR_B:-255}
+      - WATERMARK_COLOR_A=${WATERMARK_COLOR_A:-46}
+      - SHADOW_COLOR_R=${SHADOW_COLOR_R:-0}
+      - SHADOW_COLOR_G=${SHADOW_COLOR_G:-0}
+      - SHADOW_COLOR_B=${SHADOW_COLOR_B:-0}
+      - SHADOW_COLOR_A=${SHADOW_COLOR_A:-46}
+      - SHADOW_OFFSET_RATIO=${SHADOW_OFFSET_RATIO:-0.065}
+      - CHAR_SPACING_X_RATIO=${CHAR_SPACING_X_RATIO:-1.1}
+      - CHAR_SPACING_Y_RATIO=${CHAR_SPACING_Y_RATIO:-0.4}
+      - GLOBAL_OFFSET_X_RATIO=${GLOBAL_OFFSET_X_RATIO:--0.5}
+      - GLOBAL_OFFSET_Y_RATIO=${GLOBAL_OFFSET_Y_RATIO:--1.0}
+      - HTTP_POOL_MAX_IDLE=${HTTP_POOL_MAX_IDLE:-10}
+      - HTTP_CONNECT_TIMEOUT=${HTTP_CONNECT_TIMEOUT:-10}
+      - HTTP_REQUEST_TIMEOUT=${HTTP_REQUEST_TIMEOUT:-60}
+      - JPEG_QUALITY=${JPEG_QUALITY:-90}
+      - RUST_LOG=${RUST_LOG:-info}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${PORT:-3333}/health/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    volumes:
+      - ./assets:/app/assets:ro # Mount assets directory for fonts (read-only)

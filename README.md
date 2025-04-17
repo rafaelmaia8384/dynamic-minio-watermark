@@ -2,7 +2,7 @@
 
 Service for adding watermarks to images stored in MinIO.
 
-See: (https://min.io/docs/minio/linux/developers/transforms-with-object-lambda.html)
+To configure Minio to use lambda functions, see: (https://min.io/docs/minio/linux/developers/transforms-with-object-lambda.html)
 
 ## Configuration
 
@@ -72,6 +72,57 @@ echo "PORT=8080" >> .env
 # Run the application
 cargo run --release
 ```
+
+## Docker Deployment
+
+The project includes Docker and Docker Compose configuration for easy deployment.
+
+### Using Docker Compose
+
+1. Configure your environment variables (optional):
+
+```bash
+# Copy example configuration
+cp .env.example .env
+
+# Edit the configuration file
+nano .env
+```
+
+2. Build and start the service:
+
+```bash
+docker-compose up -d
+```
+
+3. Check the logs:
+
+```bash
+docker-compose logs -f
+```
+
+4. Stop the service:
+
+```bash
+docker-compose down
+```
+
+### Custom Configuration
+
+The docker-compose.yml file is set up to use environment variables with sensible defaults. You can:
+
+1. Modify the .env file with your settings (recommended)
+2. Override specific variables in the command line:
+
+```bash
+PORT=8080 WORKERS=4 WATERMARK_COLOR_A=128 docker-compose up -d
+```
+
+### Production Considerations
+
+- The Dockerfile builds the application with the `embedded_font` feature enabled for reliability
+- SSL/TLS termination should be handled by a reverse proxy like Nginx or Traefik
+- For high availability, consider deploying multiple instances behind a load balancer
 
 The service will be available at:
 - Main endpoint: `/generate/`

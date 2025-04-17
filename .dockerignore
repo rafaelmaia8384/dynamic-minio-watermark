@@ -1,0 +1,26 @@
+# Git
+.git
+.gitignore
+
+# Build artifacts
+/target
+
+# Development files
+.env
+.env.*
+*.md
+docker-compose*.yml
+Dockerfile*
+
+# Editor files
+.vscode
+.idea
+*.swp
+*.swo
+
+# Logs
+*.log
+
+# Temporary files
+tmp/
+temp/ 
