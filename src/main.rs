@@ -214,9 +214,16 @@ async fn add_watermark(image_bytes: Bytes, watermark_text: &str) -> Result<Vec<u
         y: font_height,
     };
 
-    // Watermark color and opacity
+    // Watermark and shadow settings
     let watermark_color = [100, 150, 255]; // Light blue
-    let opacity = 0.3; // 30% opacity
+    let shadow_color = [255, 255, 100]; // Yellow
+    let watermark_opacity = 0.2; // 30% opacity
+    let shadow_opacity = 0.2; // 40% opacity for shadow
+    let shadow_offset_ratio = 0.05; // 5% of character size
+
+    // Calculate shadow offset (5% of character size)
+    let shadow_offset_x = (scale.x * shadow_offset_ratio) as i32;
+    let shadow_offset_y = (scale.y * shadow_offset_ratio) as i32;
 
     // Prepare watermark pattern
     let chars: Vec<char> = watermark_text.chars().collect();
@@ -235,10 +242,9 @@ async fn add_watermark(image_bytes: Bytes, watermark_text: &str) -> Result<Vec<u
     let global_offset_y = -char_spacing_y;
 
     // Create a temporary image for character drawing
-    let mut char_buffer = image::RgbaImage::new(
-        (scale.x * 1.5) as u32, // Slightly larger than character size
-        (scale.y * 1.5) as u32,
-    );
+    let char_width = (scale.x * 1.5) as u32;
+    let char_height = (scale.y * 1.5) as u32;
+    let mut char_buffer = image::RgbaImage::new(char_width, char_height);
 
     // Draw watermark
     for row in 0..rows {
@@ -263,18 +269,18 @@ async fn add_watermark(image_bytes: Bytes, watermark_text: &str) -> Result<Vec<u
                     *pixel = image::Rgba([0, 0, 0, 0]);
                 }
 
-                // Draw the character in our buffer
+                // Draw the shadow first (offset position)
                 draw_text_mut(
                     &mut char_buffer,
                     image::Rgba([255, 255, 255, 255]), // White with full opacity
-                    0,
-                    0, // Draw at 0,0 in our buffer
+                    shadow_offset_x,
+                    shadow_offset_y,
                     scale,
                     &font,
                     &chars[char_idx].to_string(),
                 );
 
-                // Blend the character onto the main image
+                // Blend the shadow onto the main image
                 for (bx, by, pixel) in char_buffer.enumerate_pixels() {
                     let wx = x_pos as u32 + bx;
                     let wy = y_pos as u32 + by;
@@ -282,15 +288,54 @@ async fn add_watermark(image_bytes: Bytes, watermark_text: &str) -> Result<Vec<u
                     if wx < watermarked.width() && wy < watermarked.height() && pixel[3] > 0 {
                         let bg_pixel = watermarked.get_pixel(wx, wy);
 
-                        // Blend colors with specified opacity
-                        let r = (bg_pixel[0] as f32 * (1.0 - opacity)
-                            + watermark_color[0] as f32 * opacity)
+                        // Blend shadow color with specified opacity
+                        let r = (bg_pixel[0] as f32 * (1.0 - shadow_opacity)
+                            + shadow_color[0] as f32 * shadow_opacity)
                             as u8;
-                        let g = (bg_pixel[1] as f32 * (1.0 - opacity)
-                            + watermark_color[1] as f32 * opacity)
+                        let g = (bg_pixel[1] as f32 * (1.0 - shadow_opacity)
+                            + shadow_color[1] as f32 * shadow_opacity)
                             as u8;
-                        let b = (bg_pixel[2] as f32 * (1.0 - opacity)
-                            + watermark_color[2] as f32 * opacity)
+                        let b = (bg_pixel[2] as f32 * (1.0 - shadow_opacity)
+                            + shadow_color[2] as f32 * shadow_opacity)
+                            as u8;
+
+                        watermarked.put_pixel(wx, wy, image::Rgba([r, g, b, 255]));
+                    }
+                }
+
+                // Clear the character buffer again
+                for pixel in char_buffer.pixels_mut() {
+                    *pixel = image::Rgba([0, 0, 0, 0]);
+                }
+
+                // Draw the main character (original position)
+                draw_text_mut(
+                    &mut char_buffer,
+                    image::Rgba([255, 255, 255, 255]), // White with full opacity
+                    0,
+                    0,
+                    scale,
+                    &font,
+                    &chars[char_idx].to_string(),
+                );
+
+                // Blend the main character onto the main image
+                for (bx, by, pixel) in char_buffer.enumerate_pixels() {
+                    let wx = x_pos as u32 + bx;
+                    let wy = y_pos as u32 + by;
+
+                    if wx < watermarked.width() && wy < watermarked.height() && pixel[3] > 0 {
+                        let bg_pixel = watermarked.get_pixel(wx, wy);
+
+                        // Blend watermark color with specified opacity
+                        let r = (bg_pixel[0] as f32 * (1.0 - watermark_opacity)
+                            + watermark_color[0] as f32 * watermark_opacity)
+                            as u8;
+                        let g = (bg_pixel[1] as f32 * (1.0 - watermark_opacity)
+                            + watermark_color[1] as f32 * watermark_opacity)
+                            as u8;
+                        let b = (bg_pixel[2] as f32 * (1.0 - watermark_opacity)
+                            + watermark_color[2] as f32 * watermark_opacity)
                             as u8;
 
                         watermarked.put_pixel(wx, wy, image::Rgba([r, g, b, 255]));
