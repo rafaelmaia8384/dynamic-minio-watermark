@@ -1,7 +1,8 @@
 use actix_web::{web, App, HttpResponse, HttpServer, Responder};
 use bytes::Bytes;
+use dotenv::dotenv;
 use image::io::Reader as ImageReader;
-use image::{ImageOutputFormat, Rgba, RgbaImage};
+use image::{ImageOutputFormat, RgbaImage};
 use imageproc::drawing::draw_text_mut;
 use lazy_static::lazy_static;
 use log::{error, info, warn};
@@ -12,6 +13,9 @@ use std::collections::HashMap;
 use std::io::Cursor;
 use std::sync::{Arc, RwLock};
 use std::time::Instant;
+
+mod config;
+use config::CONFIG;
 
 lazy_static! {
     static ref WATERMARK_FONT: Arc<RwLock<Option<Font<'static>>>> = {
@@ -61,12 +65,11 @@ struct GenerateResponse {
 }
 
 fn load_font() -> Result<Font<'static>, String> {
-    let font_path =
-        std::env::var("FONT_PATH").unwrap_or_else(|_| "assets/DejaVuSans.ttf".to_string());
+    let font_path = &CONFIG.font_path;
 
     info!("Attempting to load font from: {}", font_path);
 
-    let font_data = match std::fs::read(&font_path) {
+    let font_data = match std::fs::read(font_path) {
         Ok(data) => {
             info!("Successfully loaded font from {}", font_path);
             data
@@ -246,25 +249,25 @@ async fn add_watermark(
             .clone()
     };
 
-    let font_height = (height as f32 * 0.10).max(10.0);
+    let font_height = (height as f32 * CONFIG.font_height_ratio).max(CONFIG.font_height_min);
     let scale = Scale {
-        x: font_height * 0.6,
+        x: font_height * CONFIG.font_width_ratio,
         y: font_height,
     };
 
-    let watermark_color = Rgba([255u8, 255, 255, (255.0 * 0.18) as u8]);
-    let shadow_color = Rgba([0u8, 0, 0, (255.0 * 0.18) as u8]);
-    let shadow_offset_ratio = 0.065;
+    let watermark_color = CONFIG.watermark_color;
+    let shadow_color = CONFIG.shadow_color;
+    let shadow_offset_ratio = CONFIG.shadow_offset_ratio;
     let shadow_offset_x = (scale.x * shadow_offset_ratio).round() as i32;
     let shadow_offset_y = (scale.y * shadow_offset_ratio).round() as i32;
 
     let chars: Vec<char> = watermark_text.chars().collect();
-    let char_spacing_x = scale.x * 1.1;
-    let char_spacing_y = scale.y * 0.4;
+    let char_spacing_x = scale.x * CONFIG.char_spacing_x_ratio;
+    let char_spacing_y = scale.y * CONFIG.char_spacing_y_ratio;
     let chars_per_row = ((width as f32 / char_spacing_x).ceil() as usize).max(1);
     let rows = ((height as f32 / char_spacing_y).ceil() as usize).max(1);
-    let global_offset_x = -char_spacing_x * 0.5;
-    let global_offset_y = -char_spacing_y;
+    let global_offset_x = char_spacing_x * CONFIG.global_offset_x_ratio;
+    let global_offset_y = char_spacing_y * CONFIG.global_offset_y_ratio;
 
     // Create a transparent layer for the watermark text and shadow
     let mut watermark_layer = RgbaImage::new(width, height);
@@ -326,7 +329,10 @@ async fn add_watermark(
 
     let mut output_buffer = Cursor::new(Vec::new());
     base_image
-        .write_to(&mut output_buffer, ImageOutputFormat::Jpeg(90))
+        .write_to(
+            &mut output_buffer,
+            ImageOutputFormat::Jpeg(CONFIG.jpeg_quality),
+        )
         .map_err(|e| format!("Failed to encode image to JPEG: {}", e))?;
 
     let encoding_duration = start_time.elapsed();
@@ -340,18 +346,18 @@ async fn add_watermark(
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
+    // Carrega as variáveis do arquivo .env
+    dotenv().ok();
+
     env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
 
-    let host = std::env::var("HOST").unwrap_or_else(|_| "0.0.0.0".to_string());
-    let port = std::env::var("PORT")
-        .ok()
-        .and_then(|p| p.parse::<u16>().ok())
-        .unwrap_or(3333);
+    let host = &CONFIG.host;
+    let port = CONFIG.port;
 
     let client = Client::builder()
-        .pool_max_idle_per_host(10)
-        .connect_timeout(std::time::Duration::from_secs(10))
-        .timeout(std::time::Duration::from_secs(60))
+        .pool_max_idle_per_host(CONFIG.http_pool_max_idle)
+        .connect_timeout(std::time::Duration::from_secs(CONFIG.http_connect_timeout))
+        .timeout(std::time::Duration::from_secs(CONFIG.http_request_timeout))
         .build()
         .expect("Failed to create HTTP client");
 
@@ -367,10 +373,11 @@ async fn main() -> std::io::Result<()> {
 
     info!("Starting server on {}:{}...", host, port);
 
-    let workers = std::env::var("WORKERS")
-        .ok()
-        .and_then(|w| w.parse::<usize>().ok())
-        .unwrap_or_else(num_cpus::get);
+    let workers = if CONFIG.workers == 0 {
+        num_cpus::get()
+    } else {
+        CONFIG.workers
+    };
     info!("Using {} worker threads", workers);
 
     let app_state = web::Data::new(AppState {
