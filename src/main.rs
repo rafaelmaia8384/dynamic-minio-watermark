@@ -256,57 +256,63 @@ async fn add_watermark(image_bytes: Bytes, watermark_text: &str) -> Result<Vec<u
     // Calculate font size to be 5% of image height
     let font_height = (height as f32) * 0.05;
     let scale = Scale {
-        x: font_height, // We'll use square proportions
+        x: font_height * 0.6, // Make width slightly smaller for a denser pattern
         y: font_height,
     };
 
     // Semi-transparent gray for better visibility on various backgrounds
-    let text_color = image::Rgba([128, 128, 128, 90]); // Semi-transparent gray
+    let text_color = image::Rgba([128, 128, 128, 80]); // Semi-transparent gray
 
-    // Calculate the average size of a character in the watermark text
-    let char_width_approx = scale.x * 0.6; // Approximate width of a character
-    let text_width_approx = char_width_approx * watermark_text.len() as f32;
+    // Create a continuous pattern across the entire image
 
-    // Calculate the spacing between watermarks
-    let spacing_x = text_width_approx * 1.5;
-    let spacing_y = font_height * 2.0;
+    // First, convert the watermark text to a repeating character array
+    let chars: Vec<char> = watermark_text.chars().collect();
+    if chars.is_empty() {
+        return Err("Watermark text cannot be empty".to_string());
+    }
 
-    // Ensure we cover the entire image
-    let x_repeats = (width as f32 / spacing_x).ceil() as i32 + 1;
-    let y_repeats = (height as f32 / spacing_y).ceil() as i32 + 1;
+    // Calculate the horizontal and vertical spacing between characters
+    let char_spacing_x = scale.x * 0.85; // Slight overlap between characters
+    let char_spacing_y = scale.y * 1.2; // Slight spacing between rows
 
-    // Draw repeated watermarks across the image in a grid pattern
-    for y_idx in -1..y_repeats {
-        for x_idx in -1..x_repeats {
-            // Offset every other row for better coverage
-            let x_offset = if y_idx % 2 == 0 { 0.0 } else { spacing_x / 2.0 };
+    // Calculate how many characters we can fit horizontally and vertically
+    let chars_per_row = (width as f32 / char_spacing_x).ceil() as usize;
+    let rows = (height as f32 / char_spacing_y).ceil() as usize;
 
-            let x = (x_idx as f32 * spacing_x + x_offset) as i32;
-            let y = (y_idx as f32 * spacing_y) as i32;
+    // Create two diagonal patterns (one from left-top to right-bottom
+    // and another from right-top to left-bottom)
+    for pattern in 0..2 {
+        // Starting offset for the second pattern (right-to-left)
+        let y_offset = if pattern == 0 {
+            0.0
+        } else {
+            char_spacing_y / 2.0
+        };
 
-            // Draw the watermark text
-            draw_text_mut(
-                &mut watermarked,
-                text_color,
-                x,
-                y,
-                scale,
-                &font,
-                watermark_text,
-            );
+        // Draw pattern of single characters
+        for row in 0..rows {
+            let y_pos = row as f32 * char_spacing_y + y_offset;
 
-            // Draw diagonal watermark as well (rotated 45 degrees visually)
-            let diagonal_x = x + (spacing_x / 4.0) as i32;
-            let diagonal_y = y + (spacing_y / 4.0) as i32;
-            draw_text_mut(
-                &mut watermarked,
-                text_color,
-                diagonal_x,
-                diagonal_y,
-                scale,
-                &font,
-                watermark_text,
-            );
+            for col in 0..chars_per_row {
+                // For the second pattern, reverse the direction
+                let x_pos = if pattern == 0 {
+                    col as f32 * char_spacing_x
+                } else {
+                    width as f32 - col as f32 * char_spacing_x
+                };
+
+                // Get character (cycling through the watermark text)
+                let char_idx = (row + col) % chars.len();
+                let c = chars[char_idx];
+
+                // Draw this character
+                if x_pos >= 0.0 && y_pos >= 0.0 && x_pos < width as f32 && y_pos < height as f32 {
+                    let x = x_pos as i32;
+                    let y = y_pos as i32;
+
+                    draw_character_mut(&mut watermarked, text_color, x, y, scale, &font, c);
+                }
+            }
         }
     }
 
@@ -318,6 +324,21 @@ async fn add_watermark(image_bytes: Bytes, watermark_text: &str) -> Result<Vec<u
         .map_err(|e| format!("Failed to encode image: {}", e))?;
 
     Ok(buffer)
+}
+
+// Helper function to draw a single character
+fn draw_character_mut(
+    image: &mut image::RgbaImage,
+    color: image::Rgba<u8>,
+    x: i32,
+    y: i32,
+    scale: Scale,
+    font: &Font,
+    character: char,
+) {
+    // We'll use the built-in draw_text_mut function but with only one character
+    let char_str = character.to_string();
+    draw_text_mut(image, color, x, y, scale, font, &char_str);
 }
 
 #[actix_web::main]
