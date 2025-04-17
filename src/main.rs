@@ -346,7 +346,7 @@ async fn add_watermark(
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    // Carrega as variáveis do arquivo .env
+    // Load variables from .env file
     dotenv().ok();
 
     env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
