@@ -1,4 +1,4 @@
-FROM rust:1.74-slim as builder
+FROM rust:1.77-slim as builder
 
 WORKDIR /usr/src/app
 COPY . .
@@ -42,4 +42,4 @@ RUN chown -R appuser:appuser /app
 USER appuser
 
 # Command to run
-CMD ["/app/dynamic-minio-watermark"] 
+CMD ["/app/dynamic-minio-watermark"]
