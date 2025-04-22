@@ -1,6 +1,23 @@
 # Dynamic MinIO Watermark
 
-Service for adding watermarks to images stored in MinIO.
+![Result watermark](assets/example.jpg)
+
+## Service for Dynamically Adding Watermarks to Images Stored in MinIO
+
+## This service is designed to dynamically apply watermarks to images stored in a MinIO object storage system. It leverages MinIO's native Lambda functions, which allow server-side transformations to be triggered on-the-fly, without the need to modify the original image or store multiple versions of it.
+
+Whenever an image is requested through a specially crafted URL or via a predefined Lambda trigger, this service intercepts the request and applies a watermark in real-time, based on customizable rules or predefined templates.
+
+This approach ensures:
+
+- Storage efficiency, as only the original image is stored.
+
+- Flexibility, allowing different watermarks per use case (e.g., user-based, time-based, or branding-specific).
+
+- Performance, since the transformation happens at the edge, close to the storage layer.
+
+
+Ideal for systems that require secure image distribution, brand protection, or user-specific watermarking, such as media platforms, digital asset management systems, or document repositories.
 
 To configure Minio to use lambda functions, see: (https://min.io/docs/minio/linux/developers/transforms-with-object-lambda.html)
 
