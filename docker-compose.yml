@@ -3,7 +3,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: dynamic-minio-watermark:latest
     container_name: dynamic-minio-watermark
     restart: unless-stopped
     ports:
