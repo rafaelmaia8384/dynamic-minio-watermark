@@ -26,7 +26,7 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 # Copy the binary from builder
-COPY --from=builder /usr/src/app/target/release/minio-watermarker /app/minio-watermarker
+COPY --from=builder /usr/src/app/target/release/dynamic-minio-watermark /app/dynamic-minio-watermark
 
 # Copy assets for optional non-embedded usage
 COPY assets /app/assets
@@ -42,4 +42,4 @@ RUN chown -R appuser:appuser /app
 USER appuser
 
 # Command to run
-CMD ["/app/minio-watermarker"] 
+CMD ["/app/dynamic-minio-watermark"] 

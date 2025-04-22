@@ -1,4 +1,4 @@
-# Minio Watermarker
+# Dynamic MinIO Watermark
 
 Service for adding watermarks to images stored in MinIO.
 
@@ -37,7 +37,7 @@ The project uses a `.env` file for configuration. You can copy the `.env.example
 - `CHAR_SPACING_X_RATIO` - Horizontal spacing as a fraction of font width (default: 1.1)
 - `CHAR_SPACING_Y_RATIO` - Vertical spacing as a fraction of font height (default: 0.4)
 - `GLOBAL_OFFSET_X_RATIO` - Global horizontal offset as a fraction of spacing (default: -0.5)
-- `GLOBAL_OFFSET_Y_RATIO` - Global vertical offset as a fraction of spacing (default: -1.0)
+- `GLOBAL_OFFSET_Y_RATIO` - Global vertical offset as a fraction of spacing (default: -1.2)
 
 #### HTTP Settings
 - `HTTP_POOL_MAX_IDLE` - Maximum number of idle connections per host (default: 10)

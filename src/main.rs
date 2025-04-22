@@ -265,7 +265,7 @@ async fn add_watermark(
     let char_spacing_x = scale.x * CONFIG.char_spacing_x_ratio;
     let char_spacing_y = scale.y * CONFIG.char_spacing_y_ratio;
     let chars_per_row = ((width as f32 / char_spacing_x).ceil() as usize).max(1);
-    let rows = ((height as f32 / char_spacing_y).ceil() as usize).max(1);
+    let rows = ((height as f32 / char_spacing_y).ceil() as usize).max(1) + 1;
     let global_offset_x = char_spacing_x * CONFIG.global_offset_x_ratio;
     let global_offset_y = char_spacing_y * CONFIG.global_offset_y_ratio;
 
@@ -349,7 +349,7 @@ async fn main() -> std::io::Result<()> {
     // Load variables from .env file
     dotenv().ok();
 
-    env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
+    env_logger::init_from_env(env_logger::Env::new().default_filter_or("error"));
 
     let host = &CONFIG.host;
     let port = CONFIG.port;

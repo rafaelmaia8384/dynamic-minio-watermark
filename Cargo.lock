@@ -535,6 +535,27 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "77c90badedccf4105eca100756a0b1289e191f6fcbdadd3cee1d2f614f97da8f"
 
 [[package]]
+name = "dynamic-minio-watermark"
+version = "0.1.0"
+dependencies = [
+ "actix-web",
+ "bytes",
+ "dotenv",
+ "env_logger",
+ "futures",
+ "image",
+ "imageproc",
+ "lazy_static",
+ "log",
+ "num_cpus",
+ "reqwest",
+ "rusttype",
+ "serde",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "either"
 version = "1.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1258,27 +1279,6 @@ name = "mime"
 version = "0.3.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6877bb514081ee2a7ff5ef9de3281f14a4dd4bceac4c09388074a6b5df8a139a"
-
-[[package]]
-name = "minio-watermarker"
-version = "0.1.0"
-dependencies = [
- "actix-web",
- "bytes",
- "dotenv",
- "env_logger",
- "futures",
- "image",
- "imageproc",
- "lazy_static",
- "log",
- "num_cpus",
- "reqwest",
- "rusttype",
- "serde",
- "serde_json",
- "tokio",
-]
 
 [[package]]
 name = "miniz_oxide"

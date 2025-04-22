@@ -3,8 +3,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: minio-watermarker:latest
-    container_name: minio-watermarker
+    image: dynamic-minio-watermark:latest
+    container_name: dynamic-minio-watermark
     restart: unless-stopped
     ports:
       - "${PORT:-3333}:${PORT:-3333}"
@@ -28,7 +28,7 @@ services:
       - CHAR_SPACING_X_RATIO=${CHAR_SPACING_X_RATIO:-1.1}
       - CHAR_SPACING_Y_RATIO=${CHAR_SPACING_Y_RATIO:-0.4}
       - GLOBAL_OFFSET_X_RATIO=${GLOBAL_OFFSET_X_RATIO:--0.5}
-      - GLOBAL_OFFSET_Y_RATIO=${GLOBAL_OFFSET_Y_RATIO:--1.0}
+      - GLOBAL_OFFSET_Y_RATIO=${GLOBAL_OFFSET_Y_RATIO:--1.2}
       - HTTP_POOL_MAX_IDLE=${HTTP_POOL_MAX_IDLE:-10}
       - HTTP_CONNECT_TIMEOUT=${HTTP_CONNECT_TIMEOUT:-10}
       - HTTP_REQUEST_TIMEOUT=${HTTP_REQUEST_TIMEOUT:-60}

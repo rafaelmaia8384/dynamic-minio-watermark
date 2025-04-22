@@ -88,7 +88,7 @@ impl Config {
         let char_spacing_x_ratio = get_numeric("CHAR_SPACING_X_RATIO", 1.1);
         let char_spacing_y_ratio = get_numeric("CHAR_SPACING_Y_RATIO", 0.4);
         let global_offset_x_ratio = get_numeric("GLOBAL_OFFSET_X_RATIO", -0.5);
-        let global_offset_y_ratio = get_numeric("GLOBAL_OFFSET_Y_RATIO", -1.0);
+        let global_offset_y_ratio = get_numeric("GLOBAL_OFFSET_Y_RATIO", -1.2);
 
         // Reading HTTP settings
         let http_pool_max_idle = get_numeric("HTTP_POOL_MAX_IDLE", 10);
