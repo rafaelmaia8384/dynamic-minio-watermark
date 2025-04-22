@@ -1,13 +1,13 @@
-FROM rust:1.77-slim as builder
+FROM rust:latest as builder
 
 WORKDIR /usr/src/app
 COPY . .
 
-# Install build dependencies
-RUN apt-get update && apt-get install -y \
-    pkg-config \
-    libssl-dev \
-    && rm -rf /var/lib/apt/lists/*
+# Install build dependencies (usually not strictly necessary with the rust:latest image)
+# RUN apt-get update && apt-get install -y \
+#     pkg-config \
+#     libssl-dev \
+#     && rm -rf /var/lib/apt/lists/*
 
 # Build with release profile and embedded font feature
 RUN cargo build --release --features embedded_font
