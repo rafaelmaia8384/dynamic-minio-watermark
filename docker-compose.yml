@@ -1,5 +1,5 @@
 services:
-  watermarker:
+  dynamic-minio-watermark:
     build:
       context: .
       dockerfile: Dockerfile
