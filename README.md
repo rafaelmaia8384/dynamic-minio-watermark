@@ -117,20 +117,53 @@ The service expects the following JSON structure in the request body:
 
 Refer to the [MinIO Object Lambda documentation](https://min.io/docs/minio/linux/developers/transforms-with-object-lambda.html) for details on setting up the Lambda function.
 
-## Docker Deployment
+### Example Python Script for Generating Presigned URL
 
-The project includes Docker and Docker Compose configuration for easy deployment.
+Here's an example using the `minio-py` library to generate a presigned URL that triggers the watermark lambda function:
 
-### Using Docker Compose
+```python
+from minio import Minio
+from minio.error import S3Error
+from datetime import timedelta
 
-1. Configure your environment variables (optional):
+# MinIO Configuration
+endpoint = 'YOUR_MINIO_ENDPOINT'      # e.g., 'localhost:9000'
+access_key = 'YOUR_ACCESS_KEY'
+secret_key = 'YOUR_SECRET_KEY'
+bucket_name = 'your-bucket-name'
+object_key = 'image.jpg'
+lambda_arn = 'arn:minio:s3-object-lambda::dynamicminiowatermark:webhook' # Replace dynamicminiowatermark with your Lambda ARN
 
-```bash
-# Copy example configuration
-cp .env.example .env
+# Desired watermark text
+watermark_text = "example"
 
-# Edit the configuration file
-nano .env
+# Create MinIO client
+client = Minio(
+    endpoint,
+    access_key=access_key,
+    secret_key=secret_key,
+    secure=secure # Set based on endpoint prefix
+)
+
+# Define extra parameters for Lambda override and watermark
+extra_params = {
+    "lambdaArn": f"{lambda_arn}",
+    "usercode": watermark_text
+}
+
+# Generate presigned URL
+try:
+    presigned_url = client.presigned_get_object(
+        bucket_name=bucket_name,
+        object_name=object_key,
+        expires=timedelta(hours=1), # URL expires in 1 hour
+        extra_query_params=extra_params
+    )
+    print(f"Presigned URL with watermark '{watermark_text}':")
+    print(presigned_url)
+
+except S3Error as e:
+    print(f"Error generating presigned URL: {e}")
 ```
 
 2. Build and start the service:
