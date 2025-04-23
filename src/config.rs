@@ -13,6 +13,7 @@ pub struct Config {
     pub host: String,
     pub port: u16,
     pub workers: usize,
+    pub log_level: String,
 
     // Font settings
     pub font_path: String,
@@ -31,13 +32,14 @@ pub struct Config {
     pub global_offset_x_ratio: f32,
     pub global_offset_y_ratio: f32,
 
-    // HTTP settings
-    pub http_pool_max_idle: usize,
-    pub http_connect_timeout: u64,
-    pub http_request_timeout: u64,
-
     // Image quality settings
     pub jpeg_quality: u8,
+
+    // Minio settings
+    pub minio_endpoint: String,
+    pub minio_access_key: String,
+    pub minio_secret_key: String,
+    pub minio_secure: bool,
 }
 
 impl Config {
@@ -60,6 +62,7 @@ impl Config {
         let host = env::var("HOST").unwrap_or_else(|_| "0.0.0.0".to_string());
         let port = get_numeric("PORT", 3333);
         let workers = get_numeric("WORKERS", 0);
+        let log_level = env::var("LOG_LEVEL").unwrap_or_else(|_| "error".to_string());
 
         // Reading font settings
         let font_path =
@@ -90,18 +93,20 @@ impl Config {
         let global_offset_x_ratio = get_numeric("GLOBAL_OFFSET_X_RATIO", -0.5);
         let global_offset_y_ratio = get_numeric("GLOBAL_OFFSET_Y_RATIO", -1.2);
 
-        // Reading HTTP settings
-        let http_pool_max_idle = get_numeric("HTTP_POOL_MAX_IDLE", 10);
-        let http_connect_timeout = get_numeric("HTTP_CONNECT_TIMEOUT", 10);
-        let http_request_timeout = get_numeric("HTTP_REQUEST_TIMEOUT", 60);
-
         // Reading image quality settings
         let jpeg_quality = get_numeric("JPEG_QUALITY", 90);
 
+        // Reading Minio settings
+        let minio_endpoint = env::var("MINIO_ENDPOINT").expect("MINIO_ENDPOINT must be set");
+        let minio_access_key = env::var("MINIO_ACCESS_KEY").expect("MINIO_ACCESS_KEY must be set");
+        let minio_secret_key = env::var("MINIO_SECRET_KEY").expect("MINIO_SECRET_KEY must be set");
+        let minio_secure = env::var("MINIO_SECURE").expect("MINIO_SECURE must be set");
+        let minio_secure = minio_secure.parse::<bool>().unwrap_or(false);
         Self {
             host,
             port,
             workers,
+            log_level,
             font_path,
             font_height_ratio,
             font_height_min,
@@ -113,10 +118,11 @@ impl Config {
             char_spacing_y_ratio,
             global_offset_x_ratio,
             global_offset_y_ratio,
-            http_pool_max_idle,
-            http_connect_timeout,
-            http_request_timeout,
             jpeg_quality,
+            minio_endpoint,
+            minio_access_key,
+            minio_secret_key,
+            minio_secure,
         }
     }
 }

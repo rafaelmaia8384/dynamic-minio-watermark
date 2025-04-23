@@ -31,11 +31,19 @@ The project uses a `.env` file for configuration. You can copy the `.env.example
 - `HOST` - Address to bind the server (default: "0.0.0.0")
 - `PORT` - Server port (default: 3333)
 - `WORKERS` - Number of workers (threads). Use 0 to use the number of available CPUs (default: 0)
+- `LOG_LEVEL` - {debug,info,error}
+
+#### Minio Settings
+-   `MINIO_ENDPOINT`: The full address of your MinIO server, including the port. **Example:** `http://localhost:9000` or `https://s3.example.com`. Ensure that the scheme in `MINIO_ENDPOINT` matches the `MINIO_SECURE` setting (`http://` for `false`, `https://` for `true`).
+-   `MINIO_ACCESS_KEY`: The access key (username) to authenticate with your MinIO server.
+-   `MINIO_SECRET_KEY`: The secret key (password) corresponding to your MinIO access key.
+-   `MINIO_SECURE`: A boolean value (`true` or `false`) indicating whether the connection to MinIO should use HTTPS (`true`) or HTTP (`false`). Ensure the scheme in `MINIO_ENDPOINT` aligns with this setting.
+
 
 #### Font Settings
 - `FONT_PATH` - Path to the TTF font (default: "assets/DejaVuSans.ttf")
 - `FONT_HEIGHT_RATIO` - Font height as a fraction of image height (default: 0.10)
-- `FONT_HEIGHT_MIN` - Minimum font height in pixels (default: 10.0)
+- `FONT_HEIGHT_MIN` - Minimum font height in pixels (default: 40.0)
 - `FONT_WIDTH_RATIO` - Font width to height ratio (default: 0.6)
 
 #### Color Settings (values from 0-255)

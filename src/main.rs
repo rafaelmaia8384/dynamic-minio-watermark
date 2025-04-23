@@ -6,13 +6,16 @@ use image::{ImageOutputFormat, RgbaImage};
 use imageproc::drawing::draw_text_mut;
 use lazy_static::lazy_static;
 use log::{error, info, warn};
-use reqwest::Client;
+use minio::s3::args::GetObjectArgs;
+use minio::s3::client::Client as MinioClient;
+use minio::s3::creds::StaticProvider;
 use rusttype::{Font, Scale};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::io::Cursor;
 use std::sync::{Arc, RwLock};
 use std::time::Instant;
+use url::Url;
 
 mod config;
 use config::CONFIG;
@@ -31,7 +34,7 @@ lazy_static! {
 }
 
 struct AppState {
-    client: Client,
+    minio_client: MinioClient,
     font: Arc<RwLock<Option<Font<'static>>>>,
 }
 
@@ -141,14 +144,26 @@ async fn generate(
         warn!("Received request with empty watermark text parameter.");
     }
 
+    let input_s3_url = &payload.get_object_context.input_s3_url;
+    let (bucket_name, object_name) = match parse_s3_url(input_s3_url) {
+        Ok((bucket, object)) => (bucket, object),
+        Err(e) => {
+            error!("Failed to parse S3 URL: {}", e);
+            return HttpResponse::BadRequest().json(GenerateResponse {
+                status: "error".to_string(),
+                message: format!("Invalid input S3 URL format: {}", e),
+            });
+        }
+    };
+
     let image_bytes =
-        match download_image(&app_state.client, &payload.get_object_context.input_s3_url).await {
+        match download_image(&app_state.minio_client, &bucket_name, &object_name).await {
             Ok(bytes) => bytes,
             Err(e) => {
-                error!("Failed to download image: {}", e);
+                error!("Failed to download image from MinIO: {}", e);
                 return HttpResponse::InternalServerError().json(GenerateResponse {
                     status: "error".to_string(),
-                    message: format!("Failed to download image: {}", e),
+                    message: format!("Failed to download image from MinIO: {}", e),
                 });
             }
         };
@@ -184,6 +199,45 @@ async fn generate(
     }
 }
 
+fn parse_s3_url(s3_url: &str) -> Result<(String, String), String> {
+    if s3_url.starts_with("s3://") {
+        let parsed_url = Url::parse(s3_url).map_err(|_| "Failed to parse S3 URL".to_string())?;
+        if parsed_url.scheme() != "s3" {
+            return Err("URL scheme is not 's3'".to_string());
+        }
+        if let Some(host) = parsed_url.host_str() {
+            let path_segments: Vec<&str> = parsed_url
+                .path_segments()
+                .map(|c| c.collect())
+                .unwrap_or_default();
+            if !host.is_empty() && !path_segments.is_empty() {
+                Ok((host.to_string(), path_segments.join("/")))
+            } else {
+                Err("Invalid S3 URL format: missing bucket or object key".to_string())
+            }
+        } else {
+            Err("Invalid S3 URL format: missing bucket".to_string())
+        }
+    } else {
+        // Tentativa de parsing para URLs HTTP que podem conter bucket e objeto no path
+        // Exemplo: http://minio.example.com/mybucket/myimage.jpg?param=value
+        if let Ok(parsed_url) = Url::parse(s3_url) {
+            let segments: Vec<&str> = parsed_url
+                .path_segments()
+                .map(|c| c.collect())
+                .unwrap_or_default();
+            if segments.len() >= 2 {
+                let bucket = segments[0].to_string();
+                let object = segments[1..].join("/");
+                if !bucket.is_empty() && !object.is_empty() {
+                    return Ok((bucket, object));
+                }
+            }
+        }
+        Err("S3 URL does not start with 's3://' and could not be parsed as HTTP URL with bucket/object".to_string())
+    }
+}
+
 fn extract_url_params(url: &str) -> HashMap<String, String> {
     let mut params = HashMap::new();
     if let Some(query_str) = url.split('?').nth(1) {
@@ -196,25 +250,34 @@ fn extract_url_params(url: &str) -> HashMap<String, String> {
     params
 }
 
-async fn download_image(client: &Client, url: &str) -> Result<Bytes, String> {
-    info!("Downloading image from: {}", url);
+async fn download_image(
+    client: &MinioClient,
+    bucket_name: &str,
+    object_name: &str,
+) -> Result<Bytes, String> {
+    info!(
+        "Downloading object '{}' from bucket '{}' in MinIO",
+        object_name, bucket_name
+    );
+
+    let args_result = GetObjectArgs::new(bucket_name, object_name);
+
+    let args = match args_result {
+        Ok(args) => args,
+        Err(e) => return Err(format!("Failed to create GetObjectArgs: {}", e)),
+    };
+
     let response = client
-        .get(url)
-        .send()
+        .get_object(&args)
         .await
-        .map_err(|e| format!("Request error while downloading image: {}", e))?;
+        .map_err(|e| format!("Failed to get object from MinIO: {}", e))?;
 
-    if !response.status().is_success() {
-        return Err(format!(
-            "Failed to download image: status code {}",
-            response.status()
-        ));
-    }
-
-    response
+    let bytes = response
         .bytes()
         .await
-        .map_err(|e| format!("Failed to read image bytes: {}", e))
+        .map_err(|e| format!("Failed to read object bytes from MinIO: {}", e))?;
+
+    Ok(bytes)
 }
 
 async fn add_watermark(
@@ -349,17 +412,37 @@ async fn main() -> std::io::Result<()> {
     // Load variables from .env file
     dotenv().ok();
 
-    env_logger::init_from_env(env_logger::Env::new().default_filter_or("error"));
+    env_logger::init_from_env(env_logger::Env::new().default_filter_or(CONFIG.log_level.as_str()));
 
     let host = &CONFIG.host;
     let port = CONFIG.port;
 
-    let client = Client::builder()
-        .pool_max_idle_per_host(CONFIG.http_pool_max_idle)
-        .connect_timeout(std::time::Duration::from_secs(CONFIG.http_connect_timeout))
-        .timeout(std::time::Duration::from_secs(CONFIG.http_request_timeout))
-        .build()
-        .expect("Failed to create HTTP client");
+    let minio_endpoint = CONFIG.minio_endpoint.clone();
+    let minio_access_key = CONFIG.minio_access_key.clone();
+    let minio_secret_key = CONFIG.minio_secret_key.clone();
+    let minio_secure = CONFIG.minio_secure;
+
+    let credentials = StaticProvider::new(&minio_access_key, &minio_secret_key, None);
+    let endpoint = minio_endpoint.parse().map_err(|e| {
+        std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!("Failed to parse MinIO endpoint: {}", e),
+        )
+    })?;
+    let provider: Option<Box<dyn minio::s3::creds::Provider + Send + Sync + 'static>> =
+        Some(Box::new(credentials));
+    let ssl_cert_file: Option<&std::path::Path> = None;
+    let ignore_cert_check: Option<bool> = Some(!minio_secure);
+
+    info!("Creating MinIO client...");
+    let minio_client =
+        minio::s3::client::Client::new(endpoint, provider, ssl_cert_file, ignore_cert_check)
+            .map_err(|e| {
+                std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("Failed to create MinIO client: {}", e),
+                )
+            })?;
 
     info!("Preloading font...");
     let font_ref_clone = Arc::clone(&WATERMARK_FONT);
@@ -381,7 +464,7 @@ async fn main() -> std::io::Result<()> {
     info!("Using {} worker threads", workers);
 
     let app_state = web::Data::new(AppState {
-        client,
+        minio_client,
         font: font_ref_clone,
     });
 

@@ -11,9 +11,10 @@ services:
       - HOST=0.0.0.0
       - PORT=${PORT:-3333}
       - WORKERS=${WORKERS:-0}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
       - FONT_PATH=${FONT_PATH:-assets/DejaVuSans.ttf}
       - FONT_HEIGHT_RATIO=${FONT_HEIGHT_RATIO:-0.10}
-      - FONT_HEIGHT_MIN=${FONT_HEIGHT_MIN:-10.0}
+      - FONT_HEIGHT_MIN=${FONT_HEIGHT_MIN:-40.0}
       - FONT_WIDTH_RATIO=${FONT_WIDTH_RATIO:-0.6}
       - WATERMARK_COLOR_R=${WATERMARK_COLOR_R:-255}
       - WATERMARK_COLOR_G=${WATERMARK_COLOR_G:-255}
@@ -33,6 +34,10 @@ services:
       - HTTP_REQUEST_TIMEOUT=${HTTP_REQUEST_TIMEOUT:-60}
       - JPEG_QUALITY=${JPEG_QUALITY:-90}
       - RUST_LOG=${RUST_LOG:-info}
+      - MINIO_ENDPOINT=${MINIO_ENDPOINT:-http://minio:9000}
+      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:-minioadmin}
+      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY:-minioadmin}
+      - MINIO_SECURE=${MINIO_SECURE:-false}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:${PORT:-3333}/health/"]
       interval: 30s
