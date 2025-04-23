@@ -68,7 +68,7 @@ impl Config {
         let font_path =
             env::var("FONT_PATH").unwrap_or_else(|_| "assets/DejaVuSans.ttf".to_string());
         let font_height_ratio = get_numeric("FONT_HEIGHT_RATIO", 0.10);
-        let font_height_min = get_numeric("FONT_HEIGHT_MIN", 10.0);
+        let font_height_min = get_numeric("FONT_HEIGHT_MIN", 40.0);
         let font_width_ratio = get_numeric("FONT_WIDTH_RATIO", 0.6);
 
         // Reading color settings
