@@ -4,7 +4,7 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: dynamic-minio-watermark
-    restart: unless-stopped
+    restart: always
     ports:
       - "${PORT:-3333}:${PORT:-3333}"
     environment:
