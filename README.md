@@ -80,24 +80,6 @@ To compile the project with an embedded font (useful for containers or environme
 cargo build --release --features embedded_font
 ```
 
-## Usage
-
-Start the server:
-
-```bash
-cargo run --release
-```
-
-Or configure and run using the .env file:
-
-```bash
-# Create or modify the .env file with your settings
-echo "PORT=8080" >> .env
-
-# Run the application
-cargo run --release
-```
-
 ### MinIO Lambda Request
 
 When configuring a MinIO Object Lambda function, you need to point it to this service's endpoint (`http://<your-service-host>:<port>/generate/`). MinIO will send a `POST` request with a JSON payload containing details about the original object request.
@@ -172,6 +154,24 @@ try:
 
 except S3Error as e:
     print(f"Error generating presigned URL: {e}")
+```
+
+## Usage
+
+1. Start the server:
+
+```bash
+cargo run --release
+```
+
+Or configure and run using the .env file:
+
+```bash
+# Create or modify the .env file with your settings
+echo "PORT=8080" >> .env
+
+# Run the application
+cargo run --release
 ```
 
 2. Build and start the service:
