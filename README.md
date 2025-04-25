@@ -82,7 +82,7 @@ cargo build --release --features embedded_font
 
 ### MinIO Lambda Request
 
-When configuring a MinIO Object Lambda function, you need to point it to this service's endpoint (`http://<your-service-host>:<port>/generate/`). MinIO will send a `POST` request with a JSON payload containing details about the original object request.
+When configuring a MinIO Object Lambda function, you need to point it to this service's endpoint (`http://<your-service-host>:<port>/`). MinIO will send a `POST` request with a JSON payload containing details about the original object request.
 
 The service expects the following JSON structure in the request body:
 
@@ -210,5 +210,5 @@ PORT=8080 WORKERS=4 WATERMARK_COLOR_A=128 docker-compose up -d
 - For high availability, consider deploying multiple instances behind a load balancer
 
 The service will be available at:
-- Main endpoint: `/generate/`
-- Health check: `/health/` 
+- Main endpoint: `[POST] /`
+- Health check: `[GET] /health/` 
