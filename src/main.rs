@@ -471,7 +471,11 @@ async fn main() -> std::io::Result<()> {
     HttpServer::new(move || {
         App::new()
             .app_data(app_state.clone())
-            .route("/generate/", web::post().to(generate))
+            .route("/", web::post().to(generate))
+            .route(
+                "/",
+                web::get().to(|| async { HttpResponse::Ok().body("OK") }),
+            )
             .route(
                 "/health/",
                 web::get().to(|| async { HttpResponse::Ok().body("OK") }),
