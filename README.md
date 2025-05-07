@@ -132,7 +132,7 @@ client = Minio(
     endpoint,
     access_key=access_key,
     secret_key=secret_key,
-    secure=secure # Set based on endpoint prefix
+    secure=False # Set based on endpoint prefix
 )
 
 # Define extra parameters for Lambda override and watermark
